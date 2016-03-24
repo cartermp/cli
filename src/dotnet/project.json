@@ -52,7 +52,10 @@
     "Microsoft.Extensions.Testing.Abstractions": "1.0.0-*",
     "Microsoft.NETCore.ConsoleHost": "1.0.0-rc2-23925",
     "Microsoft.NETCore.TestHost": "1.0.0-rc2-23925",
-    "Microsoft.NETCore.App": "1.0.0-rc2-23925",
+    "Microsoft.NETCore.App": {
+      "type":"platform",
+      "version":"1.0.0-rc2-23925"
+    },
     "System.Diagnostics.TraceSource": "4.0.0-rc2-23925",
     "System.Diagnostics.TextWriterTraceListener": "4.0.0-rc2-23925",
     "System.Resources.ReaderWriter": "4.0.0-rc2-23925",
@@ -64,10 +67,11 @@
     }
   },
   "frameworks": {
-    "netstandardapp1.5": {
+    "netstandard1.5": {
       "imports": [
         "dnxcore50",
-        "portable-net45+win8"
+        "portable-net45+win8",
+        "netstandardapp1.5"
       ]
     }
   },

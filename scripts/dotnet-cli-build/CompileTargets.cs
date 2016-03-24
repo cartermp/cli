@@ -54,6 +54,13 @@ namespace Microsoft.DotNet.Cli.Build
         private static string HostPolicyBaseName => $"{Constants.DynamicLibPrefix}hostpolicy{Constants.DynamicLibSuffix}";
 
         // Updates the stage 2 with recent changes.
+        [Target(nameof(PrepareTargets.Init), nameof(CompileStage1))]
+        public static BuildTargetResult UpdateStage1(BuildTargetContext c)
+        {
+            return c.Success();
+        }
+        
+        // Updates the stage 2 with recent changes.
         [Target(nameof(PrepareTargets.Init), nameof(CompileStage2))]
         public static BuildTargetResult UpdateBuild(BuildTargetContext c)
         {
@@ -237,6 +244,7 @@ namespace Microsoft.DotNet.Cli.Build
 
             // We publish to a sub folder of the PublishRoot so tools like heat and zip can generate folder structures easier.
             string SharedFrameworkNameAndVersionRoot = Path.Combine(outputDir, "shared", SharedFrameworkName, SharedFrameworkNugetVersion);
+            c.BuildContext["SharedFrameworkPath"] = SharedFrameworkNameAndVersionRoot;
 
             if (Directory.Exists(SharedFrameworkNameAndVersionRoot))
             {
@@ -310,6 +318,9 @@ namespace Microsoft.DotNet.Cli.Build
                 Path.Combine(Dirs.Corehost, CoreHostBaseName),
                 Path.Combine(SharedFrameworkNameAndVersionRoot, $"dotnet{Constants.ExeSuffix}"), true);
             File.Copy(
+                Path.Combine(Dirs.Corehost, CoreHostBaseName),
+                Path.Combine(SharedFrameworkNameAndVersionRoot, CoreHostBaseName), true);
+            File.Copy(
                 Path.Combine(Dirs.Corehost, HostPolicyBaseName),
                 Path.Combine(SharedFrameworkNameAndVersionRoot, HostPolicyBaseName), true);
 
@@ -355,20 +366,34 @@ namespace Microsoft.DotNet.Cli.Build
 
             FixModeFlags(outputDir);
 
+            string compilersProject = Path.Combine(Dirs.RepoRoot, "src", "compilers");
+            string compilersProjectOutput = Path.Combine(compilersProject, "bin");
+            dotnet.Build(compilersProject,
+                    "--output",
+                    compilersProjectOutput,
+                    "--framework",
+                    "netstandard1.5") 
+                    .Execute()
+                    .EnsureSuccessful();
+            var compilersDeps = Path.Combine(compilersProjectOutput, "compilers.deps.json");
+            var compilersRuntimeConfig = Path.Combine(compilersProjectOutput, "compilers.runtimeconfig.json");
+
             // Copy corehost
             File.Copy(Path.Combine(Dirs.Corehost, $"corehost{Constants.ExeSuffix}"), Path.Combine(outputDir, $"corehost{Constants.ExeSuffix}"), overwrite: true);
             File.Copy(Path.Combine(Dirs.Corehost, $"{Constants.DynamicLibPrefix}hostpolicy{Constants.DynamicLibSuffix}"), Path.Combine(outputDir, $"{Constants.DynamicLibPrefix}hostpolicy{Constants.DynamicLibSuffix}"), overwrite: true);
             File.Copy(Path.Combine(Dirs.Corehost, $"{Constants.DynamicLibPrefix}hostfxr{Constants.DynamicLibSuffix}"), Path.Combine(outputDir, $"{Constants.DynamicLibPrefix}hostfxr{Constants.DynamicLibSuffix}"), overwrite: true);
 
+            var binaryToCorehostifyOutDir = Path.Combine(outputDir, "runtimes", "any", "native");
             // Corehostify binaries
             foreach (var binaryToCorehostify in BinariesForCoreHost)
             {
                 try
                 {
                     // Yes, it is .exe even on Linux. This is the managed exe we're working with
-                    File.Copy(Path.Combine(outputDir, $"{binaryToCorehostify}.exe"), Path.Combine(outputDir, $"{binaryToCorehostify}.dll"));
-                    File.Delete(Path.Combine(outputDir, $"{binaryToCorehostify}.exe"));
-                    File.Copy(Path.Combine(outputDir, $"corehost{Constants.ExeSuffix}"), Path.Combine(outputDir, binaryToCorehostify + Constants.ExeSuffix));
+                    File.Copy(Path.Combine(binaryToCorehostifyOutDir, $"{binaryToCorehostify}.exe"), Path.Combine(outputDir, $"{binaryToCorehostify}.dll"));
+                    File.Delete(Path.Combine(binaryToCorehostifyOutDir, $"{binaryToCorehostify}.exe"));
+                    File.Copy(compilersDeps, Path.Combine(outputDir, binaryToCorehostify + ".deps.json"));
+                    File.Copy(compilersRuntimeConfig, Path.Combine(outputDir, binaryToCorehostify + ".runtimeconfig.json"));
                 }
                 catch (Exception ex)
                 {
@@ -376,9 +401,11 @@ namespace Microsoft.DotNet.Cli.Build
                 }
             }
 
-            // dotnet.exe is from stage0. But we must be using the newly built corehost in stage1
-            File.Delete(Path.Combine(outputDir, $"dotnet{Constants.ExeSuffix}"));
-            File.Copy(Path.Combine(outputDir, $"corehost{Constants.ExeSuffix}"), Path.Combine(outputDir, $"dotnet{Constants.ExeSuffix}"));
+
+            if (PlatformServices.Default.Runtime.OperatingSystemPlatform == Platform.Windows)
+            {
+                File.Delete(Path.Combine(outputDir, "System.Net.Http.dll"));
+            }
 
             // Crossgen Roslyn
             var result = CrossgenCliSdk(c, outputDir);
@@ -480,7 +507,13 @@ namespace Microsoft.DotNet.Cli.Build
             foreach (var assemblyToCrossgen in AssembliesToCrossGen)
             {
                 c.Info($"Crossgenning {assemblyToCrossgen}");
-                ExecInSilent(outputDir, crossgen, "-readytorun", "-nologo", "-platform_assemblies_paths", outputDir, assemblyToCrossgen);
+                ExecInSilent(outputDir, 
+                    crossgen, 
+                    "-readytorun",
+                    "-nologo",
+                    "-platform_assemblies_paths",
+                    $"{outputDir}{Path.PathSeparator}{c.BuildContext["SharedFrameworkPath"]}",
+                    assemblyToCrossgen);
             }
 
             c.Info("Crossgen complete");

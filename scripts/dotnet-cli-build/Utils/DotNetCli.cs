@@ -24,7 +24,7 @@ namespace Microsoft.DotNet.Cli.Build
             var newArgs = args.ToList();
             newArgs.Insert(0, command);
 
-            if (EnvVars.Verbose)
+            //if (EnvVars.Verbose)
             {
                 newArgs.Insert(0, "-v");
             }

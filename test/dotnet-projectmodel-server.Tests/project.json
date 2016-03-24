@@ -1,14 +1,13 @@
 {
   "dependencies": {
+    
+    "Microsoft.NETCore.App": "1.0.0-rc2-23924",
     "dotnet": {
       "target": "project"
     },
     "Microsoft.Win32.Registry": {
       "version": "4.0.0-rc2-23925",
       "exclude": "Compile"
-    },
-    "Microsoft.DotNet.ProjectModel": {
-      "target": "project"
     },
     "Microsoft.DotNet.Tools.Tests.Utilities": {
       "target": "project"
